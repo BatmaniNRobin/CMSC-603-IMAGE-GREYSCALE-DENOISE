@@ -33,6 +33,17 @@ __global__ void greyscale(uchar4* d_rgb, uchar* d_grey, int matrixHeight, int ma
     }
 }
 
+__global__ void denoise(uchar *d_grey, uchar *d_output, int matrixHeight, int matrixWidth, int numPixels)
+{
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if(col < matrixWidth && row < matrixHeight)
+    {
+
+    }
+}
+
 
 int main(int argc, char *argv[])
 {
@@ -86,10 +97,7 @@ int main(int argc, char *argv[])
     cudaMalloc(&d_rgb, numPixels * sizeof(uchar4));
     cudaMalloc(&d_grey, numPixels * sizeof(uchar));
     // TODO do i need memset
-	// cudaMemset(*d_greyImage, 0, sizeof(uchar) * num_pix);
-
-    // cudaMallocHost(&h_A, (numPixels * 3) * sizeof(uchar));
-    // cudaMallocHost(&h_C, numPixels * sizeof(uchar));
+	// cudaMemset(*d_grey, 0, sizeof(uchar) * numPixels);
 
     // // transfer from host to device
     cudaMemcpy(d_rgb, h_rgb, numPixels * sizeof(uchar4), cudaMemcpyHostToDevice);
@@ -101,9 +109,6 @@ int main(int argc, char *argv[])
         printf("cuda error HtoD %s", errorMessage);
     }
 
-    // TODO check these two
-	// d_rgbImg = *d_RGBImage;
-    // d_greyImg = *d_greyImage; 
     // TODO check gridDim
     // call kernel to compute matrix multiplication 
     int gridDim_x = (image.cols / THREADS_DIM) + 1;
@@ -115,7 +120,7 @@ int main(int argc, char *argv[])
     // clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     cudaEventRecord(start);
 
-    greyscale<<< gridSize, blockSize >>> (d_rgb, d_grey, matrixHeight, matrixWidth, numPixels);
+    greyscale <<< gridSize, blockSize >>> (d_rgb, d_grey, matrixHeight, matrixWidth, numPixels);
 
     // clock_gettime(CLOCK_MONOTONIC_RAW, &end);
 
@@ -137,9 +142,25 @@ int main(int argc, char *argv[])
 
     printf("GPU Time %f ms\n", milliseconds);
 
-    // clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+    //------------------------------------------------ DENOISE ---------------------------------------------------
+
+    Mat denoised_image;
+
+    denoised_image.create(image.rows, image.cols, CV_8UC1);
+
+    uchar *d_output;
+
+    cudaMalloc(&d_output, numPixels * sizeof(uchar));
+    
+    denoise <<< gridSize, blockSize >>> (d_grey, d_output, matrixHeight, matrixWidth, numPixels);
+
+    // transfer back from device to host
+    cudaMemcpy(denoised_image.ptr<uchar>(0), d_output, numPixels * sizeof(uchar), cudaMemcpyDeviceToHost);
+
+    imwrite("denoise.jpg", denoised_image);
 
     // // free memory
     cudaFree(d_rgb);
     cudaFree(d_grey);
+    cudaFree(d_output);
 }
