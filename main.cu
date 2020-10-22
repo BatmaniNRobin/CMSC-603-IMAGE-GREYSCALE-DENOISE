@@ -26,7 +26,7 @@ __global__ void greyscale(uchar4* d_rgb, uchar* d_grey, int matrixHeight, int ma
 
     if(col < matrixWidth && row < matrixHeight)
     {
-        int rgb_ab = row * matrixWidth + col; 
+        int rgb_ab = row * matrixWidth + col;
 	    uchar4 rgb_image = d_rgb[rgb_ab];
         double gray_val = (float(rgb_image.x))*0.299f + (float(rgb_image.y))*0.587f + (float(rgb_image.z))*0.114f;
         d_grey[rgb_ab] = (unsigned char)gray_val;
@@ -38,9 +38,41 @@ __global__ void denoise(uchar *d_grey, uchar *d_output, int matrixHeight, int ma
     int col = blockIdx.x * blockDim.x + threadIdx.x;
     int row = blockIdx.y * blockDim.y + threadIdx.y;
 
+    uchar upleft, up, upright, left, center, right, downleft, down, downright;
+    int i, key, j;
+
+    __shared__ int array[9]; // prolly not 16 should be 9 but ~thread_size oooo~
+    __shared__ int thread[256];
+
     if(col < matrixWidth && row < matrixHeight)
     {
+        // up = thread[row - 1];
+        // down = thread[col - 1];
+    }
 
+
+    if(col < matrixWidth && row < matrixHeight)
+    {
+        int rgb_ab = row * matrixWidth + col;
+
+        __syncthreads();
+        // insertion sort
+        for(i = 1; i < 9; i++)
+        {
+            key = array[i];
+            j = i - 1;
+
+            while(j >=0 && array[j] > key)
+            {
+                array[j+1] = array[j];
+                j = j - 1;
+            }
+            array[j+1] = key;
+        }
+
+    //     // write value to d_output
+        d_output[rgb_ab] = (unsigned char) array[4];
+        // d_output[rgb_ab] = d_grey[rgb_ab];
     }
 }
 
@@ -151,6 +183,7 @@ int main(int argc, char *argv[])
     uchar *d_output;
 
     cudaMalloc(&d_output, numPixels * sizeof(uchar));
+    // cudaMemset(*d_output, 0, sizeof(uchar) * numPixels);
     
     denoise <<< gridSize, blockSize >>> (d_grey, d_output, matrixHeight, matrixWidth, numPixels);
 
