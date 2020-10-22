@@ -128,8 +128,6 @@ int main(int argc, char *argv[])
 
     cudaMalloc(&d_rgb, numPixels * sizeof(uchar4));
     cudaMalloc(&d_grey, numPixels * sizeof(uchar));
-    // TODO do i need memset
-	// cudaMemset(*d_grey, 0, sizeof(uchar) * numPixels);
 
     // // transfer from host to device
     cudaMemcpy(d_rgb, h_rgb, numPixels * sizeof(uchar4), cudaMemcpyHostToDevice);
