@@ -39,7 +39,7 @@ __global__ void denoise(uchar *d_grey, uchar *d_output, int matrixHeight, int ma
     int col = blockIdx.x * blockDim.x + threadIdx.x;
     int row = blockIdx.y * blockDim.y + threadIdx.y;
 
-    __shared__ int array[9];
+    unsigned char array[9];
 
     if(col < matrixWidth && row < matrixHeight)
     {
