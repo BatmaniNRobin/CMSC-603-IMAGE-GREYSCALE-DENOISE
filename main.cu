@@ -17,6 +17,7 @@ using namespace cv;
 using namespace std;
 
 #define THREADS_DIM 32
+#define WINDOW_SIZE (3)
 
 
 __global__ void greyscale(uchar4* d_rgb, uchar* d_grey, int matrixHeight, int matrixWidth, int numPixels)
@@ -38,41 +39,54 @@ __global__ void denoise(uchar *d_grey, uchar *d_output, int matrixHeight, int ma
     int col = blockIdx.x * blockDim.x + threadIdx.x;
     int row = blockIdx.y * blockDim.y + threadIdx.y;
 
-    uchar upleft, up, upright, left, center, right, downleft, down, downright;
-    int i, key, j;
-
-    __shared__ int array[9]; // prolly not 16 should be 9 but ~thread_size oooo~
-    __shared__ int thread[256];
+    __shared__ int array[9];
 
     if(col < matrixWidth && row < matrixHeight)
     {
-        // up = thread[row - 1];
-        // down = thread[col - 1];
-    }
-
-
-    if(col < matrixWidth && row < matrixHeight)
-    {
-        int rgb_ab = row * matrixWidth + col;
-
-        __syncthreads();
-        // insertion sort
-        for(i = 1; i < 9; i++)
+        for(int x = 0; x < WINDOW_SIZE; x++)
         {
-            key = array[i];
-            j = i - 1;
-
-            while(j >=0 && array[j] > key)
+            for(int y = 0; y < WINDOW_SIZE; y++)
             {
-                array[j+1] = array[j];
-                j = j - 1;
+                array[x*WINDOW_SIZE+y] = d_grey[(row+x-1)*matrixWidth+(col+y-1)];
             }
-            array[j+1] = key;
         }
 
-    //     // write value to d_output
+        // TODO insertion sort
+        
+        int rgb_ab = row * matrixWidth + col;
+        
+        // int i, key, j;
+
+        // __syncthreads();
+        // // insertion sort
+        // for(i = 1; i < 9; i++)
+        // {
+        //     key = array[i];
+        //     j = i - 1;
+
+        //     while(j >=0 && array[j] > key)
+        //     {
+        //         array[j+1] = array[j];
+        //         j = j - 1;
+        //     }
+        //     array[j+1] = key;
+        // }
+
+        // // write value to d_output
+        // d_output[rgb_ab] = (unsigned char) array[4];
+
+        // bubblesort works ...
+        for (int i = 0; i < 9; i++) {
+            for (int j = i + 1; j < 9; j++) {
+                if (array[i] > array[j]) { 
+                    //Swap the variables.
+                    unsigned char temp = array[i];
+                    array[i] = array[j];
+                    array[j] = temp;
+                }
+            }
+        }
         d_output[rgb_ab] = (unsigned char) array[4];
-        // d_output[rgb_ab] = d_grey[rgb_ab];
     }
 }
 
@@ -170,25 +184,36 @@ int main(int argc, char *argv[])
 
     imwrite("grey.jpg", img_Grey);
 
-    printf("GPU Time %f ms\n", milliseconds);
+    printf("GPU Time for Grey: %f ms\n", milliseconds);
 
     //------------------------------------------------ DENOISE ---------------------------------------------------
 
     Mat denoised_image;
+
+    float ms;
+    cudaEvent_t begin, finish;
+    cudaEventCreate(&begin);
+    cudaEventCreate(&finish);
 
     denoised_image.create(image.rows, image.cols, CV_8UC1);
 
     uchar *d_output;
 
     cudaMalloc(&d_output, numPixels * sizeof(uchar));
-    // cudaMemset(*d_output, 0, sizeof(uchar) * numPixels);
     
+    cudaEventRecord(begin);
+
     denoise <<< gridSize, blockSize >>> (d_grey, d_output, matrixHeight, matrixWidth, numPixels);
 
-    // transfer back from device to host
     cudaMemcpy(denoised_image.ptr<uchar>(0), d_output, numPixels * sizeof(uchar), cudaMemcpyDeviceToHost);
 
+    cudaEventRecord(finish);
+    cudaEventSynchronize(finish);
+    cudaEventElapsedTime(&ms, begin, finish);
+
     imwrite("denoise.jpg", denoised_image);
+
+    printf("GPU Time for Denoising: %f ms\n", ms);
 
     // // free memory
     cudaFree(d_rgb);
